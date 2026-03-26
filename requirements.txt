@@ -1,13 +1,7 @@
+streamlit==1.42.0
 pandas
 numpy
-plotly
-seaborn
-streamlit
 prophet
-geopandas
-folium
-requests
-beautifulsoup4
+plotly
 yfinance
-jupyter
-python-dotenv
+altair==5.5.0
