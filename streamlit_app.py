@@ -44,7 +44,7 @@ with col3:
 arrobas = round((peso * rendimento) / 15, 2)
 valor_estimado = round(arrobas * preco_atual, 2)
 
-st.metric("📦 Arrobas estimadas", f"{arrobas} @")
+st.metric("📦 Arrobas estimadas", f"{arrobas} ")
 st.metric("💰 Valor total estimado", f"R$ {valor_estimado:,.2f}")
 
 # ==================== PREVISÃO COM EXPONENTIAL SMOOTHING ====================
