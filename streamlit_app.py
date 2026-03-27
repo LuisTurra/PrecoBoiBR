@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-from prophet import Prophet
 import plotly.graph_objects as go
 import yfinance as yf
 import warnings
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 warnings.filterwarnings('ignore')
 
 st.set_page_config(page_title="PreçoBoiBR", page_icon="🐂", layout="wide")
@@ -44,43 +44,41 @@ with col3:
 arrobas = round((peso * rendimento) / 15, 2)
 valor_estimado = round(arrobas * preco_atual, 2)
 
-st.metric("📦 Arrobas estimadas", f"{arrobas}")
+st.metric("📦 Arrobas estimadas", f"{arrobas} @")
 st.metric("💰 Valor total estimado", f"R$ {valor_estimado:,.2f}")
 
-# ==================== PREVISÃO ====================
-st.header("🔮 Previsão dos próximos 90 dias - Cepea/SP (Referência Nacional)")
+# ==================== PREVISÃO COM EXPONENTIAL SMOOTHING ====================
+st.header("🔮 Previsão dos próximos 90 dias - Cepea/SP")
 
-@st.cache_resource
-def treinar_prophet():
-    df_prophet = cepea[['Data', 'Preco_Arroba']].copy()
-    df_prophet.columns = ['ds', 'y']
-    model = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False, seasonality_mode='multiplicative')
-    model.fit(df_prophet)
-    return model
+# Preparar série temporal
+serie = cepea.set_index('Data')['Preco_Arroba']
 
-modelo = treinar_prophet()
-futuro = modelo.make_future_dataframe(periods=90)
-previsao = modelo.predict(futuro)
+# Treinar modelo Holt-Winters
+model = ExponentialSmoothing(serie, seasonal='add', seasonal_periods=365, trend='add')
+model_fit = model.fit(optimized=True)
 
+# Previsão 90 dias
+previsao = model_fit.forecast(90)
+
+# DataFrame da previsão
+datas_futuras = pd.date_range(start=cepea['Data'].iloc[-1] + pd.Timedelta(days=1), periods=90)
+df_previsao = pd.DataFrame({'Data': datas_futuras, 'Preco_Arroba': previsao.values})
+
+# Gráfico
 hoje = cepea['Data'].iloc[-1]
-
-# Gráfico principal (foco nos últimos 12 meses + previsão)
 ultimos_12_meses = cepea[cepea['Data'] >= hoje - pd.Timedelta(days=365)]
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=ultimos_12_meses['Data'], y=ultimos_12_meses['Preco_Arroba'],
                          mode='lines', name='Histórico', line=dict(color='#1f77b4', width=3)))
-fig.add_trace(go.Scatter(x=previsao['ds'], y=previsao['yhat'],
+fig.add_trace(go.Scatter(x=df_previsao['Data'], y=df_previsao['Preco_Arroba'],
                          mode='lines', name='Previsão 90 dias', line=dict(color='#2ca02c', width=4, dash='dash')))
-fig.add_trace(go.Scatter(x=previsao['ds'], y=previsao['yhat_lower'],
-                         mode='lines', fill='tonexty', fillcolor='rgba(44,160,44,0.25)',
-                         line=dict(width=0), name='Limite inferior', showlegend=False))
 
 fig.add_vline(x=hoje, line_dash="dash", line_color="red")
 fig.add_annotation(x=hoje, y=1.06, text="HOJE", showarrow=False, font=dict(color="red", size=16))
 
 fig.update_layout(
-    title="🔥 FOCO: Previsão dos próximos 90 dias",
+    title="🔥 Previsão dos próximos 90 dias (Exponential Smoothing)",
     xaxis_title="Data",
     yaxis_title="Preço por Arroba (R$)",
     hovermode="x unified",
@@ -92,9 +90,7 @@ fig.update_xaxes(range=[hoje - pd.Timedelta(days=380), hoje + pd.Timedelta(days=
 st.plotly_chart(fig, use_container_width=True)
 
 # Previsão +30 dias
-target_date = hoje + pd.Timedelta(days=30)
-idx = previsao['ds'].sub(target_date).abs().idxmin()
-preco_30d = previsao.loc[idx, 'yhat']
+preco_30d = df_previsao.iloc[29]['Preco_Arroba']
 st.info(f"🔮 Previsão +30 dias: **R$ {preco_30d:.2f}** por arroba")
 
 # ==================== HISTÓRICO + DÓLAR ====================
@@ -120,4 +116,4 @@ with st.expander("📜 Ver histórico completo + comparação com Dólar", expan
     )
     st.plotly_chart(fig_hist, use_container_width=True)
 
-st.caption("PreçoBoiBR • Dados Cepea/SP (Referência Nacional) • Projeto de Ciência de Dados")
+st.caption("PreçoBoiBR • Cepea/SP (Referência Nacional) • Previsão com Exponential Smoothing")
